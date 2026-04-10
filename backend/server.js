@@ -6,7 +6,7 @@ const Tesseract = require('tesseract.js');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Load environment variables from .env file
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+require('dotenv').config();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -20,34 +20,17 @@ const matchesPath = path.join(__dirname, 'data', 'all_matches.json');
 // ─── Data Collections ────────────────────────────────────────────────────────
 const master_medicines = new Map(); // salt_key -> master_medicine object
 const brand_lookup = new Map();     // lowercase string -> salt_key
-const curatedPharmacies = [
-    { name: "TGS FIRST AID OHC", map_link: "https://maps.app.goo.gl/JHV8FKkxGzTp9gnDA", distance_km: 2.0, bucket_km: 2 },
-    { name: "Maa Akarshani Medical", map_link: "https://maps.app.goo.gl/3xp7KuuWkKvDpmhr8", distance_km: 3.4, bucket_km: 5 },
-    { name: "Shakambhari Medical", map_link: "https://maps.app.goo.gl/jnLaPHyKdnmUrQcu8", distance_km: 4.5, bucket_km: 5 },
-    { name: "Bhagat Medical Stores", map_link: "https://maps.app.goo.gl/7KfLQrBuUWgZ1tmz5", distance_km: 4.6, bucket_km: 5 },
-    { name: "Drug Central Medicals", map_link: "https://maps.app.goo.gl/rgeUdsufjw1bEaST9", distance_km: 5.5, bucket_km: 10 },
-    { name: "Apollo Pharmacy", map_link: "https://maps.app.goo.gl/j7avsxmAzVnzT9Ln8", distance_km: 9.9, bucket_km: 10 },
-    { name: "Shree Medical", map_link: "https://maps.app.goo.gl/xPWbTjULRHoLftLB9", distance_km: 10.2, bucket_km: 10 }
-];
 
-const janAushadhiPath = path.join(__dirname, 'data', 'jan_aushadhi_kendras.json');
-
-// Helper to extract basic strength/form (improved logic)
+// Helper to extract basic strength/form (naive regex guesser)
 function guessStrengthForm(str) {
-    // Extract strength like "500 mg", "125 mg per 5 ml", "100 mg per 2 ml"
-    const strengthMatch = str.match(/\d+(\.\d+)?\s?(mg|g|ml|mcg|%)(?:\s?per\s?\d*\.?\d*\s?(ml|g))?/i);
+    const strengthMatch = str.match(/\d+(\.\d+)?(mg|g|ml|mcg|%)/i);
     const strength = strengthMatch ? strengthMatch[0] : 'Standard';
 
     let form = 'Tablet/Capsule';
-    const s = str.toLowerCase();
-    if (s.includes('syrup')) form = 'Syrup';
-    else if (s.includes('suspension')) form = 'Suspension';
-    else if (s.includes('injection')) form = 'Injection';
-    else if (s.includes('vial') || s.includes('ampoule')) form = 'Injection';
-    else if (s.includes('cream') || s.includes('gel') || s.includes('ointment')) form = 'Topical';
-    else if (s.includes('drops')) form = 'Drops';
-    else if (s.includes('inhaler') || s.includes('respules')) form = 'Inhalation';
-    else if (s.includes('solution')) form = 'Oral Solution';
+    if (/syrup|suspension/i.test(str)) form = 'Syrup';
+    else if (/injection/i.test(str)) form = 'Injection';
+    else if (/cream|gel|ointment/i.test(str)) form = 'Topical';
+    else if (/drops/i.test(str)) form = 'Drops';
 
     return { strength, form };
 }
@@ -59,52 +42,55 @@ try {
 
     rawData.forEach(entry => {
         const saltKey = `salt-${idCounter++}`;
-        const refDose = guessStrengthForm(entry.genericName);
+        const { strength, form } = guessStrengthForm(entry.genericName);
 
         // Build Master Medicine Object
         const masterData = {
             salt_key: saltKey,
             salt_name: entry.genericName,
-            strength: refDose.strength,
-            form: refDose.form,
-            therapeutic_class: "General Therapeutics",
-            compositions: [entry.genericName],
+            strength: strength,
+            form: form,
+            therapeutic_class: "General Therapeutics", // Defaulting as dataset lacks this
+            compositions: [entry.genericName], // Raw string as composition
             brands: []
         };
 
-        // 1. Add the Jan Aushadhi generic (PMBI Approved)
+        // 1. Add the Jan Aushadhi generic into the brands array
         masterData.brands.push({
             brand_id: `gen-${idCounter}`,
             brand_name: "Jan Aushadhi Generic",
             price: parseFloat(entry.genericPrice) || 0,
-            manufacturer: "PMBJP (Government of India)",
+            manufacturer: "PMBJP",
             is_generic: true,
+            price_per_unit: (parseFloat(entry.genericPrice) || 0) / 10, // Mock unit calculation
             regulatory_status: "PMBI Approved",
-            strength: refDose.strength,
-            form: refDose.form,
-            price_per_unit: (parseFloat(entry.genericPrice) || 0) / 10
+            strength: strength,
+            form: form
         });
 
+        // Register generic name in lookup pointing to this salt
         brand_lookup.set(entry.genericName.toLowerCase(), saltKey);
 
-        // 2. Add each branded match (CDSCO Verified)
+        // 2. Add each branded match into the brands array
         (entry.brandedMatches || []).forEach(br => {
             const brPrice = parseFloat(br.price) || 0;
-            const brDose = guessStrengthForm(br.name);
+            const brDetails = guessStrengthForm(br.name);
             masterData.brands.push({
                 brand_id: `br-${idCounter++}`,
                 brand_name: br.name,
                 price: brPrice,
-                manufacturer: "Verified Branded Lab",
+                manufacturer: "Branded Manufacturer", // Unknown in our stripped dataset
                 is_generic: false,
+                price_per_unit: brPrice / 10, // Mock unit calculation
                 regulatory_status: "CDSCO Verified",
-                strength: brDose.strength,
-                form: brDose.form,
-                price_per_unit: brPrice / 10
+                strength: brDetails.strength,
+                form: brDetails.form
             });
+            // Register brand name in lookup
             brand_lookup.set(br.name.toLowerCase(), saltKey);
         });
 
+        // Store the completed salt object
         master_medicines.set(saltKey, masterData);
     });
 
@@ -219,42 +205,91 @@ app.post('/api/ocr', async (req, res) => {
 
         console.log(`🔍 Processing image (${base64Image.length} chars, type: ${mimeType})...`);
 
-        const imageBuffer = Buffer.from(base64Image, 'base64');
-        
-        console.log("Analyzing with Tesseract OCR...");
-        
-        const { data: { text } } = await Tesseract.recognize(
-            imageBuffer,
-            'eng'
-        );
+        if (!process.env.OPENROUTER_API_KEY) {
+            throw new Error("OPENROUTER_API_KEY is not defined in environment variables");
+        }
 
-        console.log("✅ Tesseract Success (Raw):", text);
+        console.log("Analyzing with OpenRouter Gemma Vision...");
 
-        let wordsList = text
-            .split(/[\s,\n]+/)
-            .map(word => word.replace(/[^a-zA-Z]/g, '').trim())
-            .filter(word => word.length >= 4); // requires at least 4 letters to guess
+        // Construct the base64 URL format
+        const imageUrl = `data:${mimeType};base64,${base64Image}`;
 
-        // Filter against known medicines (naive substring lookup)
-        let medicinesList = wordsList.filter(word => {
-            const w = word.toLowerCase();
-            for (const brandName of brand_lookup.keys()) {
-                if (brandName.includes(w)) return true;
-            }
-            // also check master salts
-            for (const master of master_medicines.values()) {
-                if (master.salt_name.toLowerCase().includes(w)) return true;
-            }
-            return false;
+        const promptText = `Extract the medicine or drug names written on this prescription. 
+Return ONLY a JSON array of strings containing the identified medicine names.
+If you cannot read any medicine names clearly, return an empty array [].
+Example output: ["Amoxicillin", "Paracetamol"]
+Do not return any markdown formatting around the output, only valid JSON.`;
+
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                "model": "google/gemma-3-27b-it", // Gemma 3 vision-capable model
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": promptText
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": imageUrl
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "temperature": 0.1
+            })
         });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`OpenRouter API error: ${response.status} ${errorText}`);
+        }
+
+        const data = await response.json();
+        let resultText = data.choices[0].message.content.trim();
+
+        console.log("✅ OpenRouter Success (Raw):", resultText);
+
+        // Clean any potential markdown blocks the model may have ignored
+        resultText = resultText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+        let medicinesList = [];
+        try {
+            medicinesList = JSON.parse(resultText);
+            if (!Array.isArray(medicinesList)) throw new Error("Parsed result is not an array");
+        } catch (e) {
+            console.warn("⚠️ Failed to parse valid JSON array from model output. Attempting to extract words manually.");
+            // Fallback word extraction if model messes up the format
+            medicinesList = resultText
+                .split(/[\s,\n]+/)
+                .map(word => word.replace(/[^a-zA-Z]/g, '').trim())
+                .filter(word => word.length >= 4);
+        }
 
         // Deduplicate
         medicinesList = [...new Set(medicinesList)];
+        console.log("Extracted Medicines:", medicinesList);
 
-        res.json({ result: medicinesList });
+        const ocrResultPath = path.join(__dirname, 'data', 'latest_ocr_result.json');
+        await fs.promises.writeFile(ocrResultPath, JSON.stringify({ result: medicinesList }, null, 2));
+        console.log("📁 Saved OCR output to JSON file: " + ocrResultPath);
+
+        // Bust the require() cache so /api/ocr/latest always serves the freshly written file
+        delete require.cache[require.resolve('./data/latest_ocr_result.json')];
+
+        res.json({ file: 'latest_ocr_result.json', status: 'saved' });
 
     } catch (err) {
-        console.error("💥 Tesseract API Crash:", err.message);
+        console.error("💥 OCR API Crash:", err.message);
         res.status(500).json({
             error: "OCR Analysis Failed",
             details: err.message
@@ -262,11 +297,35 @@ app.post('/api/ocr', async (req, res) => {
     }
 });
 
+// ─── Backend Endpoint to Fetch Saved OCR JSON via require() ─────────────────
+app.get('/api/ocr/latest', (req, res) => {
+    try {
+        console.log("Fetching latest OCR JSON via require()...");
+        const ocrResultPath = path.join(__dirname, 'data', 'latest_ocr_result.json');
+
+        if (!fs.existsSync(ocrResultPath)) {
+            return res.status(404).json({ error: "No OCR scan data found yet. Please scan a prescription first." });
+        }
+
+        // Clear require cache to always get the freshest version of the file
+        delete require.cache[require.resolve('./data/latest_ocr_result.json')];
+
+        // Load the JSON file using require()
+        const ocrData = require('./data/latest_ocr_result.json');
+
+        console.log("✅ Loaded OCR JSON via require():", ocrData);
+        res.json(ocrData);
+    } catch (err) {
+        console.error("Error loading JSON via require():", err.message);
+        res.status(500).json({ error: "Failed to load OCR JSON", details: err.message });
+    }
+});
+
 // ─── Backend Medical Details Endpoint (Gemini-Powered Knowledge) ─────────────
 app.get('/api/medicines/details/:saltKey', async (req, res) => {
     const saltKey = req.params.saltKey;
     const master = master_medicines.get(saltKey);
-    
+
     if (!master) {
         return res.status(404).json({ error: "Medicine not found" });
     }
@@ -301,78 +360,76 @@ app.get('/api/medicines/details/:saltKey', async (req, res) => {
         }
         DO NOT include any Markdown formatting or extra text. ONLY return valid JSON.`;
 
-        const result = await model.generateContent(prompt);
-        let rawText = result.response.text();
-        
-        // Strip out markdown code blocks if the AI decided to include them anyway
-        rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const fallbackData = {
+            "used_for": "Information not available due to high server load. Often used to treat specific conditions associated with this salt.",
+            "benefits": "Provides relief from symptoms and aids in recovery. Please consult your doctor for exact medical benefits.",
+            "side_effects": "May cause common side effects such as nausea, dizziness, or allergic reactions. Seek medical advice if severe.",
+            "how_to_use": "Take exactly as directed by your physician. Do not exceed the recommended prescribed dose.",
+            "dosage": {
+                "kids": "Consult a pediatrician for precise dosing.",
+                "adults": "Strictly as prescribed by your doctor.",
+                "elderly": "As prescribed. May require dosage adjustments."
+            },
+            "substitutes": "Alternative generic equivalents may be available at local pharmacies."
+        };
 
-        const responseData = JSON.parse(rawText);
+        let responseData;
+        try {
+            const result = await model.generateContent(prompt);
+            let rawText = result.response.text();
+
+            // Strip out markdown code blocks if the AI decided to include them anyway
+            rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+            responseData = JSON.parse(rawText);
+        } catch (apiErr) {
+            console.error("⚠️ Gemini API Rate Limit / Error, using fallback data:", apiErr.message);
+            responseData = fallbackData;
+        }
+
         res.json(responseData);
     } catch (err) {
-        console.error("💥 Gemini Details Error:", err.message);
-        const msg = String(err.message || '');
-        const isQuotaOrRateLimit = /429|quota|rate limit|too many requests/i.test(msg);
-        if (isQuotaOrRateLimit) {
-            // Graceful fallback so UI still shows useful content when LLM quota is exhausted.
-            return res.json({
-                used_for: `${saltName} is commonly prescribed based on clinical indication by a licensed doctor.`,
-                benefits: "Can help manage symptoms when taken exactly as advised by your physician.",
-                side_effects: "Possible side effects vary by patient. Stop use and consult your doctor if any severe reaction occurs.",
-                how_to_use: "Take only as prescribed. Do not self-medicate, skip doses, or combine with other medicines without medical advice.",
-                dosage: {
-                    kids: "Pediatric dosage must be decided by a pediatrician.",
-                    adults: "Adult dosage depends on diagnosis and medical history.",
-                    elderly: "Dose adjustment may be required based on kidney/liver function and co-morbidities."
-                },
-                substitutes: "Clinical substitutes should be selected by a qualified doctor or pharmacist.",
-                ai_status: "fallback_due_to_quota"
-            });
-        }
+        console.error("💥 Details Endpoint Error:", err.message);
         res.status(500).json({ error: "Failed to fetch medical details", description: err.message });
     }
 });
 
-// ─── Backend Proxy for Geoapify API (Avoids CORS / Browser Blocks) ────────────
+// ─── Backend Proxy for Overpass API (Avoids CORS / Browser Blocks) ────────────
 app.get('/api/pharmacies/nearby', async (req, res) => {
     const { lat, lon, radius } = req.query;
     if (!lat || !lon || !radius) return res.status(400).json({ error: "Missing coordinates or radius" });
-    const latNum = Number(lat);
-    const lonNum = Number(lon);
-    const radiusNum = Number(radius);
-    if (!Number.isFinite(latNum) || !Number.isFinite(lonNum) || !Number.isFinite(radiusNum) || radiusNum <= 0) {
-        return res.status(400).json({ error: "Invalid coordinates or radius" });
-    }
-    const radiusKm = radiusNum / 1000;
-    const curatedElements = curatedPharmacies
-        .filter(store => store.distance_km <= radiusKm)
-        .sort((a, b) => a.distance_km - b.distance_km)
-        .map(store => ({
-            lat: null,
-            lon: null,
-            tags: {
-                name: store.name,
-                map_link: store.map_link,
-                distance_km: store.distance_km,
-                curated: true
-            }
-        }));
 
-    return res.json({ elements: curatedElements });
-});
+    const query = `[out:json];node["amenity"="pharmacy"](around:${radius},${lat},${lon});out;`;
+    const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
 
-app.get('/api/jan-aushadhi-kendras', (req, res) => {
     try {
-        const raw = fs.readFileSync(janAushadhiPath, 'utf8');
-        res.json(JSON.parse(raw));
+        const response = await fetch(overpassUrl);
+        if (!response.ok) throw new Error("Overpass API returned status " + response.status);
+        const data = await response.json();
+        res.json(data);
     } catch (err) {
-        console.error('Jan Aushadhi kendra list error:', err.message);
-        res.status(500).json({ error: 'Could not load Jan Aushadhi Kendra list' });
+        console.error("💥 Overpass API Proxy Error:", err.message);
+        res.status(500).json({ error: "Failed to load pharmacies", details: err.message });
     }
 });
 
 
 const PORT = process.env.PORT || 3000;
+
+// ─── Backend Endpoints for Stores ──────────────────────────────────────────────
+app.get('/api/stores/jan-aushadhi', (req, res) => {
+    try {
+        const storePath = path.join(__dirname, 'data', 'jan_aushadhi_kendras.json');
+        if (!fs.existsSync(storePath)) {
+            return res.status(404).json({ error: "Jan Aushadhi store data not found" });
+        }
+        const storeData = JSON.parse(fs.readFileSync(storePath, 'utf8'));
+        res.json(storeData);
+    } catch (err) {
+        console.error("Error loading stores:", err.message);
+        res.status(500).json({ error: "Failed to load stores", details: err.message });
+    }
+});
+
 
 // Global Error Handler (Ensures all errors return JSON instead of HTML)
 app.use((err, req, res, next) => {

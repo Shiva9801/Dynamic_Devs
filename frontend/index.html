@@ -4,13 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MedFind - Affordable Medicine Intelligence</title>
+    <meta name="description" content="Find affordable generic alternatives to expensive branded medicines with verified price comparisons across Indian pharmacies.">
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Gemini ESM Import Map -->
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/generative-ai": "https://esm.run/@google/generative-ai"
+        }
+      }
+    </script>
 </head>
 <body>
-    <!-- Tesseract.js for OCR -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+    <!-- Removed Tesseract, using OCR.space now -->
 
     <div class="background-elements">
         <div class="blob shape-1"></div>
@@ -19,91 +28,213 @@
 
     <nav class="navbar">
         <div class="logo">
-            <i class="fa-solid fa-leaf"></i> MedFind
+            <i class="fa-solid fa-capsules"></i> MedFind
         </div>
         <div class="nav-links">
-            <a href="#" class="active">Search</a>
-            <a href="#">Jan Aushadhi</a>
+            <a href="#" id="navSearch" class="active">Search</a>
+            <a href="#janAushadhiSection" id="navJanAushadhi">Jan Aushadhi</a>
             <a href="#">About</a>
         </div>
     </nav>
 
     <main class="container">
         <header class="hero">
-            <h1>Intelligence for <span class="gradient-text">Affordable</span> Access</h1>
-            <p>Find scientifically equivalent, verified low-cost generic alternatives to expensive branded medicines.</p>
+            <h1>Compare Medicine Prices.<br><span class="gradient-text">Save More.</span></h1>
+            <p>Search any brand or generic medicine and instantly compare prices across pharmacies and Jan Aushadhi stores.</p>
             
-            <div class="search-container">
+            <div class="search-options">
+                <label><input type="radio" name="searchType" value="brand" checked> Search by Brand</label>
+                <label><input type="radio" name="searchType" value="salt"> Search by Salt/Composition</label>
+            </div>
+            
+            <div class="search-container" id="searchContainer">
                 <i class="fa-solid fa-magnifying-glass search-icon"></i>
-                <input type="text" id="searchInput" placeholder="Search by brand name (e.g. Lipitor) or active ingredient...">
-                
+                <input type="text" id="searchInput" placeholder="Enter medicine name..." autocomplete="off">
                 <input type="file" id="prescriptionInput" accept="image/*" class="hidden">
                 <button id="scanBtn" class="btn-icon" title="Upload Prescription Image">
                     <i class="fa-solid fa-camera"></i> Scan
                 </button>
-                <button id="searchBtn" class="btn-primary">Analyze</button>
-                
+                <button id="searchBtn" class="btn-primary">Search</button>
                 <div id="autocompleteResults" class="autocomplete-dropdown hidden"></div>
             </div>
-            
+
             <div id="ocrLoading" class="hidden scan-overlay">
                 <div class="scanning-bar"></div>
                 <div class="spinner"></div>
-                <span>Scanning prescription... <span id="ocrProgress">0%</span></span>
+                <span>Scanning prescription via OCR.space...</span>
             </div>
-
             <div id="loading" class="hidden">
                 <div class="spinner"></div>
-                <span>Analyzing database...</span>
+                <span>Searching...</span>
             </div>
         </header>
 
-        <section id="resultsSection" class="results-grid hidden">
-            <!-- Medicine results will be injected here -->
-        </section>
 
-        <!-- Modal for Detailed Alternatives -->
-        <div id="alternativesModal" class="modal-overlay hidden">
-            <div class="modal-content glass-card">
-                <button class="close-modal"><i class="fa-solid fa-xmark"></i></button>
-                
-                <div class="modal-header">
-                    <h2 id="modalBrandName">Brand Name</h2>
-                    <span class="badge" id="modalTherapeutic">Therapeutic Use</span>
+
+        <section id="resultsSection" class="results-grid hidden"></section>
+
+
+
+        <!-- ─── New Advanced Comparison Panel ────────────────────────────── -->
+        <div id="comparisonPanel" class="comparison-panel hidden">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <button id="backBtn" class="btn-back"><i class="fa-solid fa-arrow-left"></i> Back to Search</button>
+                <button id="locateNearbyBtn" class="btn-primary" style="padding: 0.6rem 1.2rem; font-size: 0.95rem;"><i class="fa-solid fa-location-dot"></i> Locate Nearby Stock</button>
+            </div>
+
+            <!-- A. Medicine Summary Card -->
+            <div class="summary-card glass-card">
+                <div class="summary-header">
+                    <h2><i class="fa-solid fa-pills"></i> <span id="summarySaltName">Salt Name</span></h2>
+                    <span class="badge" id="summaryTherapeutic">Therapeutics</span>
                 </div>
-                
-                <div class="price-comparison">
-                    <div class="brand-price">
-                        <p>Branded Price</p>
-                        <h3 id="modalBrandPrice">₹0.00</h3>
+                <div class="summary-details">
+                    <div><strong>Active Ingredient (Salt):</strong> <span id="summaryIngredient">...</span></div>
+                    <div><strong>Strength:</strong> <span id="summaryStrength">...</span></div>
+                    <div><strong>Form:</strong> <span id="summaryForm">...</span></div>
+                </div>
+            </div>
+
+            <!-- B. Alternatives Table & Filter Bar -->
+            <div class="filter-bar glass-card">
+                <div class="filter-group">
+                    <label>Sort Prices</label>
+                    <select id="filterSort">
+                        <option value="asc">Low to High</option>
+                        <option value="desc">High to Low</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Type Filter</label>
+                    <select id="filterType">
+                        <option value="all">All (Generic + Branded)</option>
+                        <option value="generic">Generics Only</option>
+                        <option value="branded">Branded Only</option>
+                    </select>
+                </div>
+                <div class="filter-group" style="flex-direction:row; align-items:center;">
+                    <input type="checkbox" id="filterAvailable" style="margin-right:5px;">
+                    <label for="filterAvailable" style="margin-bottom:0;">Available Nearby</label>
+                </div>
+            </div>
+
+            <div id="dosageWarningContainer"></div>
+
+            <div class="table-container glass-card">
+                <table class="alternatives-table">
+                    <thead>
+                        <tr>
+                            <th>Brand Name</th>
+                            <th>Regulatory Status</th>
+                            <th>Type</th>
+                            <th>Price</th>
+                            <th>Price/Unit</th>
+                            <th>Savings</th>
+                        </tr>
+                    </thead>
+                    <tbody id="alternativesTableBody">
+                        <!-- Rows injected here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Jan Aushadhi Kendras Inside Comparison Panel (collapsed) -->
+            <section id="janAushadhiSection" class="jan-aushadhi-section glass-card" style="margin-top: 1.5rem;">
+                <button class="jan-aushadhi-toggle" id="janAushadhiToggle" aria-expanded="false" aria-controls="janAushadhiBody">
+                    <span>
+                        <i class="fa-solid fa-store-alt" style="color:var(--primary-color); margin-right:8px;"></i>
+                        <span id="janAushadhiTitle">Jan Aushadhi Kendras Near You</span>
+                        <span id="janAushadhiSubtitle" class="jan-aushadhi-subtitle"></span>
+                    </span>
+                    <i class="fa-solid fa-chevron-down jan-toggle-icon" id="janToggleIcon"></i>
+                </button>
+                <div id="janAushadhiBody" class="jan-aushadhi-body">
+                    <div id="janAushadhiLoading" class="jan-aushadhi-loading hidden">
+                        <div class="spinner" style="margin: 0 auto;"></div>
+                        <span>Loading list…</span>
                     </div>
-                    <div class="vs-divider">VS</div>
-                    <div class="generic-price highlight">
-                        <p>Jan Aushadhi Price</p>
-                        <h3 id="modalGenericPrice">₹0.00</h3>
+                    <div id="janAushadhiList" class="jan-aushadhi-list"></div>
+                    <p id="janAushadhiError" class="hidden jan-aushadhi-error"></p>
+                </div>
+            </section>
+
+            <!-- C. Medical Information Tabs (New Feature) -->
+            <div class="medical-info-section glass-card">
+                <div class="info-tabs">
+                    <button class="info-tab active" data-tab="used_for"><i class="fa-solid fa-virus"></i> Cures</button>
+                    <button class="info-tab" data-tab="benefits"><i class="fa-solid fa-star"></i> Benefits</button>
+                    <button class="info-tab" data-tab="how_to_use"><i class="fa-solid fa-hand-holding-medical"></i> Usage</button>
+                    <button class="info-tab" data-tab="dosage"><i class="fa-solid fa-clock"></i> Dosage</button>
+                    <button class="info-tab" data-tab="side_effects"><i class="fa-solid fa-skull-crossbones"></i> Side Effects</button>
+                    <button class="info-tab" data-tab="substitutes"><i class="fa-solid fa-repeat"></i> Substitutes</button>
+                </div>
+                <div class="info-content-container">
+                    <div id="infoLoading" class="hidden">
+                        <div class="spinner"></div>
+                        <span>Fetching medical intelligence...</span>
+                    </div>
+                    <div id="infoContent" class="info-content">
+                        <!-- Content injected here -->
+                        Select a tab to view specific details about this medicine.
                     </div>
                 </div>
+            </div>
 
-                <div class="savings-alert">
-                    <i class="fa-solid fa-piggy-bank"></i>
-                    <p>You can save up to <strong id="savingsAmount">85%</strong> with verified generics!</p>
+            <!-- F. Safety Section -->
+            <div class="safety-section glass-card">
+                <h3><i class="fa-solid fa-shield-halved"></i> Safety & Prescribing Information</h3>
+                <div class="safety-grid">
+                    <div class="safety-item">
+                        <i class="fa-solid fa-prescription" style="color: var(--accent-color);"></i>
+                        <div>
+                            <strong>Prescription Required</strong>
+                            <p id="safetyRx">Yes (Schedule H)</p>
+                        </div>
+                    </div>
+                    <div class="safety-item">
+                        <i class="fa-solid fa-triangle-exclamation" style="color: var(--orange-color);"></i>
+                        <div>
+                            <strong>Warnings</strong>
+                            <p id="safetyWarning">Do not consume with alcohol. May cause drowsiness.</p>
+                        </div>
+                    </div>
                 </div>
+            </div>
 
-                <h3>Verified Alternatives (Same Active Ingredients)</h3>
-                <p class="ingredient-text" id="modalIngredient">Active Ingredient</p>
-                
-                <div id="alternativesList" class="alternatives-list">
-                    <!-- Generic alternatives injected here -->
+        </div>
+
+    </main>
+
+    <!-- ─── Pharmacy Modal ──────────────────────────────────────────────── -->
+    <div id="pharmacyModal" class="modal-overlay hidden">
+        <div class="modal-container glass-card" style="max-height: 85vh; width: 95%; max-width: 600px; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h2><i class="fa-solid fa-store"></i> Nearby Pharmacies</h2>
+                <button id="closePharmacyModal" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:1.2rem;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="modal-body" style="border-bottom: 1px solid var(--border-color); padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2);">
+                <span id="pharmacyLocationText" style="color:var(--text-secondary); font-size: 0.9rem;">Getting location...</span>
+                <select id="pharmacyDistanceFilter" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: #fff; border-radius: 6px; padding: 0.4rem; font-family: 'Outfit';">
+                    <option value="2000">Within 2 km</option>
+                    <option value="5000" selected>Within 5 km</option>
+                    <option value="10000">Within 10 km</option>
+                </select>
+            </div>
+
+            <div id="pharmacyListContainer" style="overflow-y: auto; padding: 1rem 1.5rem; flex: 1;">
+                <div id="pharmacyLoading" class="hidden" style="text-align:center; padding: 2rem;">
+                    <div class="spinner" style="margin: 0 auto 1rem;"></div>
+                    <span style="color:var(--text-secondary);">Searching nearby pharmacies...</span>
                 </div>
-
-                <h3>Nearby Availability</h3>
-                <div id="pharmaciesList" class="pharmacies-list">
-                    <!-- Pharmacies injected here -->
+                <div id="pharmacyList" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <!-- Pharmacy cards injected here -->
                 </div>
             </div>
         </div>
-    </main>
+    </div>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

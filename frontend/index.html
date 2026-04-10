@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedFind - Affordable Medicine Intelligence</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Tesseract.js for OCR -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+
+    <div class="background-elements">
+        <div class="blob shape-1"></div>
+        <div class="blob shape-2"></div>
+    </div>
+
+    <nav class="navbar">
+        <div class="logo">
+            <i class="fa-solid fa-leaf"></i> MedFind
+        </div>
+        <div class="nav-links">
+            <a href="#" class="active">Search</a>
+            <a href="#">Jan Aushadhi</a>
+            <a href="#">About</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        <header class="hero">
+            <h1>Intelligence for <span class="gradient-text">Affordable</span> Access</h1>
+            <p>Find scientifically equivalent, verified low-cost generic alternatives to expensive branded medicines.</p>
+            
+            <div class="search-container">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input type="text" id="searchInput" placeholder="Search by brand name (e.g. Lipitor) or active ingredient...">
+                
+                <input type="file" id="prescriptionInput" accept="image/*" class="hidden">
+                <button id="scanBtn" class="btn-icon" title="Upload Prescription Image">
+                    <i class="fa-solid fa-camera"></i> Scan
+                </button>
+                <button id="searchBtn" class="btn-primary">Analyze</button>
+                
+                <div id="autocompleteResults" class="autocomplete-dropdown hidden"></div>
+            </div>
+            
+            <div id="ocrLoading" class="hidden scan-overlay">
+                <div class="scanning-bar"></div>
+                <div class="spinner"></div>
+                <span>Scanning prescription... <span id="ocrProgress">0%</span></span>
+            </div>
+
+            <div id="loading" class="hidden">
+                <div class="spinner"></div>
+                <span>Analyzing database...</span>
+            </div>
+        </header>
+
+        <section id="resultsSection" class="results-grid hidden">
+            <!-- Medicine results will be injected here -->
+        </section>
+
+        <!-- Modal for Detailed Alternatives -->
+        <div id="alternativesModal" class="modal-overlay hidden">
+            <div class="modal-content glass-card">
+                <button class="close-modal"><i class="fa-solid fa-xmark"></i></button>
+                
+                <div class="modal-header">
+                    <h2 id="modalBrandName">Brand Name</h2>
+                    <span class="badge" id="modalTherapeutic">Therapeutic Use</span>
+                </div>
+                
+                <div class="price-comparison">
+                    <div class="brand-price">
+                        <p>Branded Price</p>
+                        <h3 id="modalBrandPrice">₹0.00</h3>
+                    </div>
+                    <div class="vs-divider">VS</div>
+                    <div class="generic-price highlight">
+                        <p>Jan Aushadhi Price</p>
+                        <h3 id="modalGenericPrice">₹0.00</h3>
+                    </div>
+                </div>
+
+                <div class="savings-alert">
+                    <i class="fa-solid fa-piggy-bank"></i>
+                    <p>You can save up to <strong id="savingsAmount">85%</strong> with verified generics!</p>
+                </div>
+
+                <h3>Verified Alternatives (Same Active Ingredients)</h3>
+                <p class="ingredient-text" id="modalIngredient">Active Ingredient</p>
+                
+                <div id="alternativesList" class="alternatives-list">
+                    <!-- Generic alternatives injected here -->
+                </div>
+
+                <h3>Nearby Availability</h3>
+                <div id="pharmaciesList" class="pharmacies-list">
+                    <!-- Pharmacies injected here -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>

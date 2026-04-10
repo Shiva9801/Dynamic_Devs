@@ -1,14 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MedFind - Affordable Medicine Intelligence</title>
-    <meta name="description" content="Find affordable generic alternatives to expensive branded medicines with verified price comparisons across Indian pharmacies.">
+    <meta name="description"
+        content="Find affordable generic alternatives to expensive branded medicines with verified price comparisons across Indian pharmacies.">
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+
     <!-- Gemini ESM Import Map -->
     <script type="importmap">
       {
@@ -18,6 +20,7 @@
       }
     </script>
 </head>
+
 <body>
     <!-- Removed Tesseract, using OCR.space now -->
 
@@ -31,8 +34,8 @@
             <i class="fa-solid fa-capsules"></i> MedFind
         </div>
         <div class="nav-links">
-            <a href="#" id="navSearch" class="active">Search</a>
-            <a href="#janAushadhiSection" id="navJanAushadhi">Jan Aushadhi</a>
+            <a href="#" class="active">Search</a>
+            <a href="#">Jan Aushadhi</a>
             <a href="#">About</a>
         </div>
     </nav>
@@ -40,13 +43,14 @@
     <main class="container">
         <header class="hero">
             <h1>Compare Medicine Prices.<br><span class="gradient-text">Save More.</span></h1>
-            <p>Search any brand or generic medicine and instantly compare prices across pharmacies and Jan Aushadhi stores.</p>
-            
+            <p>Search any brand or generic medicine and instantly compare prices across pharmacies and Jan Aushadhi
+                stores.</p>
+
             <div class="search-options">
                 <label><input type="radio" name="searchType" value="brand" checked> Search by Brand</label>
                 <label><input type="radio" name="searchType" value="salt"> Search by Salt/Composition</label>
             </div>
-            
+
             <div class="search-container" id="searchContainer">
                 <i class="fa-solid fa-magnifying-glass search-icon"></i>
                 <input type="text" id="searchInput" placeholder="Enter medicine name..." autocomplete="off">
@@ -69,18 +73,20 @@
             </div>
         </header>
 
-
+        <!-- Persistent Medicine Switch Tray (populated after OCR) -->
+        <div id="medicineSwitchTray" class="switch-tray hidden">
+            <!-- Switch buttons injected by JS -->
+        </div>
 
         <section id="resultsSection" class="results-grid hidden"></section>
 
-
-
         <!-- ─── New Advanced Comparison Panel ────────────────────────────── -->
         <div id="comparisonPanel" class="comparison-panel hidden">
-            
+
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                 <button id="backBtn" class="btn-back"><i class="fa-solid fa-arrow-left"></i> Back to Search</button>
-                <button id="locateNearbyBtn" class="btn-primary" style="padding: 0.6rem 1.2rem; font-size: 0.95rem;"><i class="fa-solid fa-location-dot"></i> Locate Nearby Stock</button>
+                <button id="locateNearbyBtn" class="btn-primary" style="padding: 0.6rem 1.2rem; font-size: 0.95rem;"><i
+                        class="fa-solid fa-location-dot"></i> Locate Nearby Stock</button>
             </div>
 
             <!-- A. Medicine Summary Card -->
@@ -119,15 +125,14 @@
                 </div>
             </div>
 
-            <div id="dosageWarningContainer"></div>
-
             <div class="table-container glass-card">
                 <table class="alternatives-table">
                     <thead>
                         <tr>
                             <th>Brand Name</th>
-                            <th>Regulatory Status</th>
+                            <th>Manufacturer</th>
                             <th>Type</th>
+                            <th>Regulatory</th>
                             <th>Price</th>
                             <th>Price/Unit</th>
                             <th>Savings</th>
@@ -139,35 +144,39 @@
                 </table>
             </div>
 
-            <!-- Jan Aushadhi Kendras Inside Comparison Panel (collapsed) -->
-            <section id="janAushadhiSection" class="jan-aushadhi-section glass-card" style="margin-top: 1.5rem;">
-                <button class="jan-aushadhi-toggle" id="janAushadhiToggle" aria-expanded="false" aria-controls="janAushadhiBody">
-                    <span>
-                        <i class="fa-solid fa-store-alt" style="color:var(--primary-color); margin-right:8px;"></i>
-                        <span id="janAushadhiTitle">Jan Aushadhi Kendras Near You</span>
-                        <span id="janAushadhiSubtitle" class="jan-aushadhi-subtitle"></span>
-                    </span>
-                    <i class="fa-solid fa-chevron-down jan-toggle-icon" id="janToggleIcon"></i>
-                </button>
-                <div id="janAushadhiBody" class="jan-aushadhi-body">
-                    <div id="janAushadhiLoading" class="jan-aushadhi-loading hidden">
-                        <div class="spinner" style="margin: 0 auto;"></div>
-                        <span>Loading list…</span>
+            <!-- Jan Aushadhi Kendra Accordion (Replacer Section) -->
+            <div class="jan-aushadhi-accordion glass-card" id="janAushadhiAccordion">
+                <div class="accordion-header" id="janAushadhiHeader">
+                    <div class="header-left">
+                        <i class="fa-solid fa-store"></i>
+                        <span>Jan Aushadhi Kendra</span>
+                        <span class="badge" id="janAushadhiCount">0</span>
                     </div>
-                    <div id="janAushadhiList" class="jan-aushadhi-list"></div>
-                    <p id="janAushadhiError" class="hidden jan-aushadhi-error"></p>
+                    <i class="fa-solid fa-chevron-down chevron"></i>
                 </div>
-            </section>
+                <div class="accordion-content hidden" id="janAushadhiContent">
+                    <div id="janAushadhiLoading" class="hidden">
+                        <div class="spinner"></div>
+                        <span>Loading Kendra list...</span>
+                    </div>
+                    <div class="kendra-list" id="janAushadhiList">
+                        <!-- Kendra cards injected here -->
+                    </div>
+                </div>
+            </div>
 
             <!-- C. Medical Information Tabs (New Feature) -->
             <div class="medical-info-section glass-card">
                 <div class="info-tabs">
                     <button class="info-tab active" data-tab="used_for"><i class="fa-solid fa-virus"></i> Cures</button>
                     <button class="info-tab" data-tab="benefits"><i class="fa-solid fa-star"></i> Benefits</button>
-                    <button class="info-tab" data-tab="how_to_use"><i class="fa-solid fa-hand-holding-medical"></i> Usage</button>
+                    <button class="info-tab" data-tab="how_to_use"><i class="fa-solid fa-hand-holding-medical"></i>
+                        Usage</button>
                     <button class="info-tab" data-tab="dosage"><i class="fa-solid fa-clock"></i> Dosage</button>
-                    <button class="info-tab" data-tab="side_effects"><i class="fa-solid fa-skull-crossbones"></i> Side Effects</button>
-                    <button class="info-tab" data-tab="substitutes"><i class="fa-solid fa-repeat"></i> Substitutes</button>
+                    <button class="info-tab" data-tab="side_effects"><i class="fa-solid fa-skull-crossbones"></i> Side
+                        Effects</button>
+                    <button class="info-tab" data-tab="substitutes"><i class="fa-solid fa-repeat"></i>
+                        Substitutes</button>
                 </div>
                 <div class="info-content-container">
                     <div id="infoLoading" class="hidden">
@@ -208,15 +217,21 @@
 
     <!-- ─── Pharmacy Modal ──────────────────────────────────────────────── -->
     <div id="pharmacyModal" class="modal-overlay hidden">
-        <div class="modal-container glass-card" style="max-height: 85vh; width: 95%; max-width: 600px; display: flex; flex-direction: column;">
+        <div class="modal-container glass-card"
+            style="max-height: 85vh; width: 95%; max-width: 600px; display: flex; flex-direction: column;">
             <div class="modal-header">
                 <h2><i class="fa-solid fa-store"></i> Nearby Pharmacies</h2>
-                <button id="closePharmacyModal" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:1.2rem;"><i class="fa-solid fa-xmark"></i></button>
+                <button id="closePharmacyModal"
+                    style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:1.2rem;"><i
+                        class="fa-solid fa-xmark"></i></button>
             </div>
-            
-            <div class="modal-body" style="border-bottom: 1px solid var(--border-color); padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2);">
-                <span id="pharmacyLocationText" style="color:var(--text-secondary); font-size: 0.9rem;">Getting location...</span>
-                <select id="pharmacyDistanceFilter" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: #fff; border-radius: 6px; padding: 0.4rem; font-family: 'Outfit';">
+
+            <div class="modal-body"
+                style="border-bottom: 1px solid var(--border-color); padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2);">
+                <span id="pharmacyLocationText" style="color:var(--text-secondary); font-size: 0.9rem;">Getting
+                    location...</span>
+                <select id="pharmacyDistanceFilter"
+                    style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: #fff; border-radius: 6px; padding: 0.4rem; font-family: 'Outfit';">
                     <option value="2000">Within 2 km</option>
                     <option value="5000" selected>Within 5 km</option>
                     <option value="10000">Within 10 km</option>
@@ -235,6 +250,26 @@
         </div>
     </div>
 
+    <!-- ─── Medicine Selector Modal (OCR Multi-Result) ──────────────── -->
+    <div id="medicineSelectorModal" class="modal-overlay hidden">
+        <div class="med-selector-container glass-card">
+            <div class="med-selector-header">
+                <div class="med-selector-icon"><i class="fa-solid fa-file-prescription"></i></div>
+                <h2>Multiple Medicines Detected</h2>
+                <p>Your prescription contains multiple medicines. Which one would you like to explore first?</p>
+            </div>
+            <div id="medicineSelectorList" class="med-selector-list">
+                <!-- Buttons injected by JS -->
+            </div>
+            <div class="med-selector-footer">
+                <button id="showAllMedicinesBtn" class="btn-show-all">
+                    <i class="fa-solid fa-list"></i> Show All Results Together
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="app.js"></script>
 </body>
+
 </html>

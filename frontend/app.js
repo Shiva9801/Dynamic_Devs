@@ -1,4 +1,4 @@
-const API_BASE_URL = `http://${window.location.hostname}:3000/api`;
+const API_BASE_URL = 'http://localhost:3000/api';
 
 // ─── DOM References ───────────────────────────────────────────────────────────
 const searchInput = document.getElementById('searchInput');
@@ -29,14 +29,33 @@ const pharmacyList = document.getElementById('pharmacyList');
 const pharmacyLoading = document.getElementById('pharmacyLoading');
 const pharmacyLocationText = document.getElementById('pharmacyLocationText');
 
+// Medicine Modal Nodes
+const medicineSelectorModal = document.getElementById('medicineSelectorModal');
+const medicineSelectorList = document.getElementById('medicineSelectorList');
+const showAllMedicinesBtn = document.getElementById('showAllMedicinesBtn');
+
+// Switch Tray Nodes
+const medicineSwitchTray = document.getElementById('medicineSwitchTray');
+
+// Jan Aushadhi Kendra Nodes
+const janAushadhiAccordion = document.getElementById('janAushadhiAccordion');
+const janAushadhiHeader = document.getElementById('janAushadhiHeader');
+const janAushadhiContent = document.getElementById('janAushadhiContent');
+const janAushadhiList = document.getElementById('janAushadhiList');
+const janAushadhiCount = document.getElementById('janAushadhiCount');
+const janAushadhiLoading = document.getElementById('janAushadhiLoading');
+
 let currentSaltGroup = null; // Stores the currently selected master_medicine
 let currentMedicalDetails = null; // Stores AI medical intelligence
+let detectedMedicines = []; // Stores the latest OCR scan results for switching
 let activeTab = 'used_for';
 let searchTimeout = null;
 let userLocation = null;
 
 // ─── Event Listeners ──────────────────────────────────────────────────────────
 searchInput.addEventListener('input', e => {
+    // Hide switch tray if user starts typing a new manual search
+    if (medicineSwitchTray) medicineSwitchTray.classList.add('hidden');
     clearTimeout(searchTimeout);
     const q = e.target.value.trim();
     if (q.length < 3) return hideAutocomplete();
@@ -80,6 +99,12 @@ document.addEventListener('click', e => {
         activeTab = e.target.getAttribute('data-tab');
         renderTabContent();
     }
+});
+
+// Jan Aushadhi Accordion Toggle
+janAushadhiHeader.addEventListener('click', () => {
+    janAushadhiAccordion.classList.toggle('open');
+    janAushadhiContent.classList.toggle('hidden');
 });
 
 // Helper to get active search type (brand vs salt)
@@ -173,13 +198,60 @@ function openComparisonPanel(saltObj) {
 
     applyFilters();
     fetchMedicineDetails(saltObj.salt_key);
+    fetchJanAushadhiStores();
+}
+
+// ─── Jan Aushadhi Kendra Logic ──────────────────────────────────────────────
+async function fetchJanAushadhiStores() {
+    // Reset accordion state
+    janAushadhiAccordion.classList.remove('open');
+    janAushadhiContent.classList.add('hidden');
+    janAushadhiList.innerHTML = '';
+    janAushadhiCount.textContent = '0';
+
+    janAushadhiLoading.classList.remove('hidden');
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/stores/jan-aushadhi`);
+        if (!res.ok) throw new Error("Could not fetch Kendra data");
+
+        const data = await res.json();
+        renderJanAushadhiStores(data.kendras);
+    } catch (err) {
+        console.error("Jan Aushadhi Error:", err);
+        janAushadhiList.innerHTML = `<p style="padding: 1rem; color: var(--danger-color)">⚠️ Failed to load Jan Aushadhi stores.</p>`;
+    } finally {
+        janAushadhiLoading.classList.add('hidden');
+    }
+}
+
+function renderJanAushadhiStores(kendras) {
+    if (!kendras || kendras.length === 0) {
+        janAushadhiCount.textContent = '0';
+        janAushadhiList.innerHTML = `<p style="padding: 1rem; color: var(--text-secondary)">No stores found in the database.</p>`;
+        return;
+    }
+
+    janAushadhiCount.textContent = kendras.length;
+    janAushadhiList.innerHTML = '';
+
+    kendras.forEach(k => {
+        const card = document.createElement('div');
+        card.className = 'kendra-card';
+        card.innerHTML = `
+            <h4><i class="fa-solid fa-house-medical"></i> ${k.name}</h4>
+            <p><i class="fa-solid fa-location-dot" style="margin-right:5px"></i> ${k.address}</p>
+            <p style="margin-top:5px; font-size:0.8rem; opacity:0.8;">Pincode: ${k.pin_code}</p>
+        `;
+        janAushadhiList.appendChild(card);
+    });
 }
 
 // ─── Medical Details Fetching & Rendering ──────────────────────────────────
 async function fetchMedicineDetails(saltKey) {
     const infoLoading = document.getElementById('infoLoading');
     const infoContent = document.getElementById('infoContent');
-    
+
     infoLoading.classList.remove('hidden');
     infoContent.classList.add('hidden');
     currentMedicalDetails = null;
@@ -187,7 +259,7 @@ async function fetchMedicineDetails(saltKey) {
     try {
         const res = await fetch(`${API_BASE_URL}/medicines/details/${saltKey}`);
         if (!res.ok) throw new Error("Could not fetch clinical details");
-        
+
         currentMedicalDetails = await res.json();
         renderTabContent();
     } catch (err) {
@@ -240,13 +312,6 @@ function applyFilters() {
     if (!currentSaltGroup) return;
 
     let brands = [...currentSaltGroup.brands];
-    const warnContainer = document.getElementById('dosageWarningContainer');
-    warnContainer.innerHTML = '';
-    let hasMismatch = false;
-
-    // Ref values from the master salt
-    const refStrength = currentSaltGroup.strength;
-    const refForm = currentSaltGroup.form;
 
     // Sort
     const sortVal = filterSort.value;
@@ -284,23 +349,9 @@ function applyFilters() {
             typeBadge += ` <span class="badge best-value" style="margin-left:5px;"><i class="fa-solid fa-crown"></i> Best Value</span>`;
         }
 
-        // Regulatory Status
-        let regBadge = '';
-        if (b.regulatory_status === 'PMBI Approved') {
-            regBadge = `<span class="badge pmbi"><i class="fa-solid fa-certificate"></i> PMBI Approved</span>`;
-        } else if (b.regulatory_status === 'CDSCO Verified') {
-            regBadge = `<span class="badge cdsco"><i class="fa-solid fa-check-double"></i> CDSCO Verified</span>`;
-        }
-
-        // Dosage Mismatch Check
-        const strengthMatch = b.strength === refStrength;
-        const formMatch = b.form === refForm;
-        let doseInfo = '';
-        
-        if (!strengthMatch || !formMatch) {
-            hasMismatch = true;
-            doseInfo = `<span class="badge warning" style="margin-top:5px; display:inline-block;"><i class="fa-solid fa-triangle-exclamation"></i> Dose Mismatch: ${b.strength} (${b.form})</span>`;
-        }
+        let regBadge = b.regulatory_status === "PMBI Approved"
+            ? `<span class="badge" style="background: rgba(16,185,129,0.15); color: var(--accent-color); border: 1px solid var(--accent-color);"><i class="fa-solid fa-check-circle"></i> PMBI Approved</span>`
+            : `<span class="badge" style="background: rgba(14,165,233,0.15); color: var(--primary-color); border: 1px solid var(--primary-color);"><i class="fa-solid fa-shield-halved"></i> CDSCO Verified</span>`;
 
         let savePercent = 0;
         let saveStr = '<span class="savings-none">--</span>';
@@ -309,32 +360,27 @@ function applyFilters() {
             if (savePercent > 0) saveStr = `<span class="savings-high">${savePercent}% off MAX</span>`;
         }
 
+        let warningHTML = '';
+        if ((b.strength && b.strength !== currentSaltGroup.strength) || (b.form && b.form !== currentSaltGroup.form)) {
+            warningHTML = `<div style="font-size: 0.8rem; color: var(--orange-color); margin-top: 5px; display: inline-flex; align-items: center; gap: 4px; background: rgba(245,158,11,0.1); padding: 2px 6px; border-radius: 4px;">
+                <i class="fa-solid fa-triangle-exclamation"></i> diff: ${b.strength || '?'} ${b.form || '?'}
+            </div>`;
+        }
+
         tr.innerHTML = `
             <td>
                 <span class="brand-title">${b.brand_name}</span>
-                <div style="font-size:0.8rem; color:var(--text-secondary)">${b.manufacturer}</div>
-                ${doseInfo}
+                ${warningHTML}
             </td>
-            <td>${regBadge}</td>
+            <td style="color:var(--text-secondary); font-size:0.9rem">${b.manufacturer}</td>
             <td>${typeBadge}</td>
+            <td>${regBadge}</td>
             <td style="font-weight:600; font-size:1.1rem">₹${b.price.toFixed(2)}</td>
             <td style="color:var(--text-secondary); font-size:0.9rem">₹${b.price_per_unit.toFixed(2)} / unit</td>
             <td>${saveStr}</td>
         `;
         tBody.appendChild(tr);
     });
-
-    if (hasMismatch) {
-        warnContainer.innerHTML = `
-            <div class="dosage-mismatch-warning">
-                <i class="fa-solid fa-circle-exclamation" style="font-size:1.2rem;"></i>
-                <div>
-                    <strong>Attention: Dosage/Form Differences Found</strong>
-                    <p style="font-size:0.85rem; margin-top:2px;">Some alternatives listed have different strengths or forms than the searched medicine. Please consult your doctor/pharmacist to adjust the quantity accordingly.</p>
-                </div>
-            </div>
-        `;
-    }
 }
 
 // ─── Backend OCR Integration ──────────────────────────────────────────────────
@@ -344,7 +390,10 @@ async function handleOCR(e) {
 
     ocrLoading.classList.remove('hidden');
     resultsSection.classList.add('hidden');
-    
+    comparisonPanel.classList.add('hidden');
+    if (medicineSwitchTray) medicineSwitchTray.classList.add('hidden');
+    detectedMedicines = [];
+
     try {
         // ─── Compress image to max 1024px before sending (reduces token cost ~90%) ───
         const compressImage = (file) => new Promise((resolve) => {
@@ -384,31 +433,40 @@ async function handleOCR(e) {
             })
         });
 
-        const data = await response.json();
+        const initialData = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.error || "Backend failed to process image");
+            throw new Error(initialData.error || "Backend failed to process image");
         }
 
-        const medicines = data.result; // This is now guaranteed to be an array by the backend
-        console.log("OCR Extracted Array:", medicines);
+        console.log("OCR Extracted and JSON saved on backend:", initialData.file);
+
+        // Fetch the generated JSON file explicitly from the backend
+        const jsonResponse = await fetch(`${API_BASE_URL}/ocr/latest`);
+        if (!jsonResponse.ok) {
+            throw new Error("Failed to retrieve generated JSON file");
+        }
+        const data = await jsonResponse.json();
+
+        const medicines = data.result;
+        console.log("Data loaded from JSON file:", medicines);
 
         if (!medicines || medicines.length === 0) {
-             alert('The AI could not confidently read any medicines on this prescription. Try a clearer photo.');
-             ocrLoading.classList.add('hidden');
-             return;
+            alert('The AI could not confidently read any medicines on this prescription. Try a clearer photo.');
+            ocrLoading.classList.add('hidden');
+            return;
         }
 
-        // Take the first valid medicine name and pipe it into search
-        const finalQuery = medicines[0].toLowerCase();
-        console.log("Searching for:", finalQuery);
-
-        searchInput.value = finalQuery;
         ocrLoading.classList.add('hidden');
-        
-        if (searchInput.value) {
-            searchTypeRadios[0].checked = true;
-            fetchAutocomplete(searchInput.value);
+
+        if (medicines.length === 1) {
+            // Only one medicine found, proceed directly
+            detectedMedicines = medicines;
+            processAndRenderMedicines(medicines);
+        } else {
+            // Multiple medicines found
+            detectedMedicines = medicines;
+            showMedicineSelectorModal(medicines);
         }
 
     } catch (err) {
@@ -419,34 +477,130 @@ async function handleOCR(e) {
     }
 }
 
+// ─── OCR Medicine Selector & Processing ─────────────────────────────────────
+function showMedicineSelectorModal(medicines) {
+    medicineSelectorList.innerHTML = '';
+
+    // Create a button for each medicine
+    medicines.forEach(med => {
+        const btn = document.createElement('button');
+        btn.className = 'med-selector-btn';
+        btn.innerHTML = `<span>${med}</span> <i class="fa-solid fa-chevron-right"></i>`;
+        btn.onclick = () => {
+            medicineSelectorModal.classList.add('hidden');
+            processAndRenderMedicines([med]);
+        };
+        medicineSelectorList.appendChild(btn);
+    });
+
+    // Set up the "Show All" button
+    showAllMedicinesBtn.onclick = () => {
+        medicineSelectorModal.classList.add('hidden');
+        processAndRenderMedicines(medicines);
+    };
+
+    medicineSelectorModal.classList.remove('hidden');
+}
+
+// ─── Switch Tray Logic ──────────────────────────────────────────────────────
+function renderSwitchTray(activeMedicine = null) {
+    if (!detectedMedicines || detectedMedicines.length <= 1) {
+        medicineSwitchTray.classList.add('hidden');
+        return;
+    }
+
+    medicineSwitchTray.innerHTML = '';
+    medicineSwitchTray.classList.remove('hidden');
+
+    // "Show All" button
+    const allBtn = document.createElement('button');
+    allBtn.className = `switch-pill ${activeMedicine === 'all' ? 'active' : ''}`;
+    allBtn.innerHTML = `<i class="fa-solid fa-list"></i> All Results`;
+    allBtn.onclick = () => {
+        processAndRenderMedicines(detectedMedicines, 'all');
+    };
+    medicineSwitchTray.appendChild(allBtn);
+
+    // Individual medicine buttons
+    detectedMedicines.forEach(med => {
+        const btn = document.createElement('button');
+        btn.className = `switch-pill ${activeMedicine === med ? 'active' : ''}`;
+        btn.innerHTML = `<i class="fa-solid fa-capsules"></i> ${med}`;
+        btn.onclick = () => {
+            processAndRenderMedicines([med], med);
+        };
+        medicineSwitchTray.appendChild(btn);
+    });
+}
+
+async function processAndRenderMedicines(medicinesToProcess, activeKey = null) {
+    // If we have multiple results, show/update the switch tray
+    if (detectedMedicines.length > 1) {
+        // Set activeKey if not provided (default to the specific medicine if one is being rendered)
+        const currentActive = activeKey || (medicinesToProcess.length === 1 ? medicinesToProcess[0] : 'all');
+        renderSwitchTray(currentActive);
+    } else {
+        medicineSwitchTray.classList.add('hidden');
+    }
+
+    // Show all found items in search input visually
+    searchInput.value = medicinesToProcess.join(", ");
+    searchTypeRadios[0].checked = true; // ensure brand search is checked
+
+    loading.classList.remove('hidden');
+    resultsSection.classList.add('hidden');
+    comparisonPanel.classList.add('hidden');
+
+    try {
+        let combinedSalts = [];
+
+        // Query the backend for each identified medicine
+        for (const med of medicinesToProcess) {
+            const queryStr = med.toLowerCase();
+            const searchTypes = ['brand', 'salt'];
+
+            for (const type of searchTypes) {
+                try {
+                    const res = await fetch(`${API_BASE_URL}/medicines/search?q=${encodeURIComponent(queryStr)}&type=${type}`);
+                    if (res.ok) {
+                        const saltsData = await res.json();
+                        combinedSalts = combinedSalts.concat(saltsData);
+                    }
+                } catch (e) {
+                    console.error("Failed backend search for:", queryStr, "type:", type, e);
+                }
+            }
+        }
+
+        // Deduplicate the combined salts by comparing salt_key
+        const uniqueMap = new Map();
+        combinedSalts.forEach(s => uniqueMap.set(s.salt_key, s));
+        const uniqueSalts = Array.from(uniqueMap.values());
+
+        console.log(`Total unique medicines found for display: ${uniqueSalts.length}`);
+
+        // Finally render all found medicine cards together
+        renderResultCards(uniqueSalts);
+
+    } catch (err) {
+        console.error("Error processing OCR results:", err);
+        resultsSection.innerHTML = `<p style="grid-column:1/-1;color:var(--danger-color)">❌ Backend offline or error fetching results.</p>`;
+        resultsSection.classList.remove('hidden');
+    } finally {
+        loading.classList.add('hidden');
+    }
+}
+
 // ─── Nearby Pharmacies Logic ──────────────────────────────────────────────────
 function getDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; // km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
-}
-
-async function fetchRouteDistancesKm(originLat, originLon, destinations) {
-    if (!destinations || destinations.length === 0) return [];
-    try {
-        const coords = [[originLon, originLat], ...destinations.map(d => [d.lon, d.lat])]
-            .map(pair => `${pair[0]},${pair[1]}`)
-            .join(';');
-        const destinationIndexes = destinations.map((_, idx) => idx + 1).join(';');
-        const osrmUrl = `https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&destinations=${destinationIndexes}&annotations=distance`;
-        const res = await fetch(osrmUrl);
-        if (!res.ok) throw new Error('Routing service unavailable');
-        const data = await res.json();
-        const row = data.distances && data.distances[0] ? data.distances[0] : [];
-        return row.map(meters => (typeof meters === 'number' ? meters / 1000 : null));
-    } catch (_) {
-        return destinations.map(() => null);
-    }
 }
 
 function checkNearbyPharmacies() {
@@ -455,10 +609,10 @@ function checkNearbyPharmacies() {
         pharmacyLocationText.textContent = "Geolocation not supported.";
         return;
     }
-    
+
     pharmacyLocationText.textContent = "Getting exact location...";
     pharmacyLoading.classList.remove('hidden');
-    
+
     navigator.geolocation.getCurrentPosition(
         position => {
             userLocation = { lat: position.coords.latitude, lon: position.coords.longitude };
@@ -473,97 +627,53 @@ function checkNearbyPharmacies() {
     );
 }
 
+const curatedPharmacies = [
+    { name: "TGS FIRST AID OHC", map_link: "https://maps.app.goo.gl/JHV8FKkxGzTp9gnDA", distance_km: 2.0, bucket_km: 2 },
+    { name: "Maa Akarshani Medical", map_link: "https://maps.app.goo.gl/3xp7KuuWkKvDpmhr8", distance_km: 3.4, bucket_km: 5 },
+    { name: "Shakambhari Medical", map_link: "https://maps.app.goo.gl/jnLaPHyKdnmUrQcu8", distance_km: 4.5, bucket_km: 5 },
+    { name: "Bhagat Medical Stores", map_link: "https://maps.app.goo.gl/7KfLQrBuUWgZ1tmz5", distance_km: 4.6, bucket_km: 5 },
+    { name: "Drug Central Medicals", map_link: "https://maps.app.goo.gl/rgeUdsufjw1bEaST9", distance_km: 5.5, bucket_km: 10 },
+    { name: "Apollo Pharmacy", map_link: "https://maps.app.goo.gl/j7avsxmAzVnzT9Ln8", distance_km: 9.9, bucket_km: 10 },
+    { name: "Shree Medical", map_link: "https://maps.app.goo.gl/xPWbTjULRHoLftLB9", distance_km: 10.2, bucket_km: 10 }
+];
+
 async function fetchOverpassPharmacies(lat, lon) {
     pharmacyList.innerHTML = '';
     pharmacyLoading.classList.remove('hidden');
-    
-    const radius = Number(pharmacyDistanceFilter.value); // in meters
-    
-    try {
-        const res = await fetch(`${API_BASE_URL}/pharmacies/nearby?lat=${lat}&lon=${lon}&radius=${radius}`);
-        if (!res.ok) {
-            let message = "Backend Proxy failed";
-            try {
-                const errData = await res.json();
-                message = errData.details || errData.error || message;
-            } catch (_) {
-                // keep default message when response body is not JSON
-            }
-            throw new Error(message);
-        }
-        const data = await res.json();
-        
+
+    const radius = parseInt(pharmacyDistanceFilter.value); // in meters
+    const radiusKm = radius / 1000;
+
+    // Simulate delay
+    setTimeout(() => {
         pharmacyLoading.classList.add('hidden');
-        
-        if (!data.elements || data.elements.length === 0) {
-            pharmacyList.innerHTML = `<p style="color:var(--text-secondary); padding: 1rem;">No mapped pharmacies found within this radius. Try increasing distance to 10-20 km.</p>`;
+
+        const filteredPharmacies = curatedPharmacies.filter(p => p.bucket_km <= radiusKm);
+
+        if (filteredPharmacies.length === 0) {
+            pharmacyList.innerHTML = `<p style="color:var(--text-secondary); padding: 1rem;">No curated stores found within this radius.</p>`;
             pharmacyLocationText.textContent = `Found 0 stores`;
             return;
         }
 
-        const basePharmacies = data.elements.map(el => {
-            const hasCoords = Number.isFinite(el.lat) && Number.isFinite(el.lon);
-            const manualDistance = Number(el.tags && el.tags.distance_km);
-            const distance = hasCoords ? getDistance(lat, lon, el.lat, el.lon) : (Number.isFinite(manualDistance) ? manualDistance : null);
-            const name = el.tags.name || "Local Pharmacy";
-            return {
-                name,
-                lat: hasCoords ? el.lat : null,
-                lon: hasCoords ? el.lon : null,
-                distance,
-                mapLink: (el.tags && el.tags.map_link) || null
-            };
-        });
+        pharmacyLocationText.textContent = `Found ${filteredPharmacies.length} stores nearby`;
 
-        const withCoords = basePharmacies.filter(p => p.lat != null && p.lon != null);
-        const routeDistancesForCoords = await fetchRouteDistancesKm(lat, lon, withCoords);
-        const routeDistances = [];
-        let routeIdx = 0;
-        for (const p of basePharmacies) {
-            if (p.lat != null && p.lon != null) {
-                routeDistances.push(routeDistancesForCoords[routeIdx] ?? null);
-                routeIdx++;
-            } else {
-                routeDistances.push(null);
-            }
-        }
-        const pharmacies = basePharmacies
-            .map((p, idx) => ({
-                ...p,
-                routeDistance: routeDistances[idx]
-            }))
-            .sort((a, b) => {
-                if (a.routeDistance != null && b.routeDistance != null) return a.routeDistance - b.routeDistance;
-                if (a.routeDistance != null) return -1;
-                if (b.routeDistance != null) return 1;
-                if (a.distance != null && b.distance != null) return a.distance - b.distance;
-                if (a.distance != null) return -1;
-                if (b.distance != null) return 1;
-                return 0;
-            });
-        
-        pharmacyLocationText.textContent = `Found ${pharmacies.length} stores nearby`;
-
-        pharmacies.forEach(p => {
+        filteredPharmacies.forEach(p => {
             // Simulated fake stock
-            let hash = 0;
-            for (const ch of p.name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-            const bucket = hash % 10;
+            const rand = Math.random();
             let stockClass, stockText;
-            if (bucket < 6) { stockClass = 'stock-high'; stockText = 'In Stock'; }
-            else if (bucket < 8) { stockClass = 'stock-low'; stockText = 'Low Stock'; }
+            if (rand < 0.7) { stockClass = 'stock-high'; stockText = 'In Stock'; }
+            else if (rand < 0.9) { stockClass = 'stock-low'; stockText = 'Low Stock'; }
             else { stockClass = 'stock-out'; stockText = 'Out of Stock'; }
 
-            const mapLink = p.mapLink || (p.lat != null && p.lon != null
-                ? `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}`
-                : 'https://www.google.com/maps');
+            const mapLink = p.map_link;
 
             const card = document.createElement('div');
             card.className = 'pharmacy-card';
             card.innerHTML = `
                 <div class="pharmacy-header">
                     <span class="pharmacy-name"><i class="fa-solid fa-house-medical"></i> ${p.name}</span>
-                    <span class="pharmacy-distance">${p.routeDistance != null ? `${p.routeDistance.toFixed(1)} km by road` : (p.distance != null ? `~${p.distance.toFixed(1)} km` : 'Distance unavailable')}</span>
+                    <span class="pharmacy-distance">${p.distance_km.toFixed(1)} km</span>
                 </div>
                 <div class="stock-badge ${stockClass}">${stockText}</div>
                 <a href="${mapLink}" target="_blank" class="btn-directions">
@@ -572,109 +682,5 @@ async function fetchOverpassPharmacies(lat, lon) {
             `;
             pharmacyList.appendChild(card);
         });
-
-    } catch (err) {
-        pharmacyLoading.classList.add('hidden');
-        pharmacyLocationText.textContent = "Service busy. Please retry.";
-        pharmacyList.innerHTML = `<p style="color:var(--danger-color); padding: 1rem;">Unable to load nearby pharmacy data right now.<br>Error Details: ${err.message}<br><br>Tip: wait 10-20 seconds and try again, or increase radius.</p>`;
-    }
+    }, 500);
 }
-
-// ─── Jan Aushadhi Kendra list (static addresses, no maps) ───────────────────
-const janAushadhiListEl = document.getElementById('janAushadhiList');
-const janAushadhiLoadingEl = document.getElementById('janAushadhiLoading');
-const janAushadhiErrorEl = document.getElementById('janAushadhiError');
-
-async function loadJanAushadhiKendras() {
-    if (!janAushadhiListEl) return;
-    janAushadhiLoadingEl?.classList.remove('hidden');
-    janAushadhiErrorEl?.classList.add('hidden');
-    try {
-        const res = await fetch(`${API_BASE_URL}/jan-aushadhi-kendras`);
-        if (!res.ok) throw new Error('Could not load list');
-        const data = await res.json();
-        const titleEl = document.getElementById('janAushadhiTitle');
-        const subEl = document.getElementById('janAushadhiSubtitle');
-        if (titleEl) titleEl.textContent = data.title || 'Jan Aushadhi Kendras';
-        if (subEl) subEl.textContent = data.subtitle || '';
-        janAushadhiListEl.innerHTML = (data.kendras || []).map(k => `
-            <article class="jan-kendra-card">
-                <span class="jan-kendra-sr">${k.sr_no}</span>
-                <div class="jan-kendra-body">
-                    <div class="jan-kendra-code">${escapeHtml(k.kendra_code)}</div>
-                    <h3 class="jan-kendra-name">${escapeHtml(k.name)}</h3>
-                    <p class="jan-kendra-meta">Pin ${escapeHtml(k.pin_code)} · ${escapeHtml(k.state_name)} · ${escapeHtml(k.district_name)}</p>
-                    <p class="jan-kendra-address">${escapeHtml(k.address)}</p>
-                </div>
-            </article>
-        `).join('');
-    } catch (e) {
-        console.error('Jan Aushadhi list:', e);
-        if (janAushadhiErrorEl) {
-            janAushadhiErrorEl.textContent = 'Could not load Jan Aushadhi Kendra list. Is the backend running?';
-            janAushadhiErrorEl.classList.remove('hidden');
-        }
-        janAushadhiListEl.innerHTML = '';
-    } finally {
-        janAushadhiLoadingEl?.classList.add('hidden');
-    }
-}
-
-function escapeHtml(s) {
-    if (s == null) return '';
-    return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
-
-loadJanAushadhiKendras();
-
-document.getElementById('navSearch')?.addEventListener('click', e => {
-    e.preventDefault();
-    // Return to search view
-    comparisonPanel.classList.add('hidden');
-    resultsSection.classList.remove('hidden');
-    document.querySelector('.hero')?.scrollIntoView({ behavior: 'smooth' });
-    document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
-    e.currentTarget.classList.add('active');
-});
-
-document.getElementById('navJanAushadhi')?.addEventListener('click', e => {
-    e.preventDefault();
-    document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
-    e.currentTarget.classList.add('active');
-    // The Jan Aushadhi section lives inside the comparison panel.
-    // If it's hidden (no medicine selected yet), just scroll to search.
-    if (comparisonPanel.classList.contains('hidden')) {
-        document.querySelector('.hero')?.scrollIntoView({ behavior: 'smooth' });
-        return;
-    }
-    // Auto-expand the accordion
-    const body = document.getElementById('janAushadhiBody');
-    const icon = document.getElementById('janToggleIcon');
-    const btn  = document.getElementById('janAushadhiToggle');
-    if (body && !body.classList.contains('open')) {
-        body.classList.add('open');
-        icon?.classList.add('open');
-        btn?.setAttribute('aria-expanded', 'true');
-    }
-    document.getElementById('janAushadhiSection')?.scrollIntoView({ behavior: 'smooth' });
-});
-
-// ─── Jan Aushadhi accordion toggles ──────────────────────────────────────────
-function setupJanToggle(btnId, bodyId, iconId) {
-    const btn  = document.getElementById(btnId);
-    const body = document.getElementById(bodyId);
-    const icon = document.getElementById(iconId);
-    if (!btn || !body) return;
-    btn.addEventListener('click', () => {
-        const isOpen = body.classList.toggle('open');
-        icon?.classList.toggle('open', isOpen);
-        btn.setAttribute('aria-expanded', String(isOpen));
-    });
-}
-
-setupJanToggle('janAushadhiToggle', 'janAushadhiBody', 'janToggleIcon');
-

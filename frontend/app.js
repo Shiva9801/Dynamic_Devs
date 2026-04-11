@@ -161,7 +161,7 @@ async function fetchAutocomplete(query) {
     const type = getSearchType();
 
     try {
-        const res = await fetch(`${API_BASE_URL}/medicines/search?q=${encodeURIComponent(query)}&type=${type}`);
+        const res = await fetch(`${API_BASE_URL}/api/medicines/search?q=${encodeURIComponent(query)}&type=${type}`);
         const data = await res.json(); // Array of master_medicines
         renderResultCards(data);
     } catch (e) {
@@ -251,7 +251,7 @@ async function fetchJanAushadhiStores() {
     janAushadhiLoading.classList.remove('hidden');
 
     try {
-        const res = await fetch(`${API_BASE_URL}/stores/jan-aushadhi`);
+        const res = await fetch(`${API_BASE_URL}/api/stores/jan-aushadhi`);
         if (!res.ok) throw new Error("Could not fetch Kendra data");
 
         const data = await res.json();
@@ -296,7 +296,7 @@ async function fetchMedicineDetails(saltKey) {
     currentMedicalDetails = null;
 
     try {
-        const res = await fetch(`${API_BASE_URL}/medicines/details/${saltKey}`);
+        const res = await fetch(`${API_BASE_URL}/api/medicines/details/${saltKey}`);
         if (!res.ok) throw new Error("Could not fetch clinical details");
 
         currentMedicalDetails = await res.json();
@@ -461,7 +461,7 @@ async function handleOCR(e) {
         const b64Data = await compressImage(file);
 
         // Post to our secure backend
-        const response = await fetch(`${API_BASE_URL}/ocr`, {
+        const response = await fetch(`${API_BASE_URL}/api/ocr`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -481,7 +481,7 @@ async function handleOCR(e) {
         console.log("OCR Extracted and JSON saved on backend:", initialData.file);
 
         // Fetch the generated JSON file explicitly from the backend
-        const jsonResponse = await fetch(`${API_BASE_URL}/ocr/latest`);
+        const jsonResponse = await fetch(`${API_BASE_URL}/api/ocr/latest`);
         if (!jsonResponse.ok) {
             throw new Error("Failed to retrieve generated JSON file");
         }
@@ -600,7 +600,7 @@ async function processAndRenderMedicines(medicinesToProcess, activeKey = null) {
 
             for (const type of searchTypes) {
                 try {
-                    const res = await fetch(`${API_BASE_URL}/medicines/search?q=${encodeURIComponent(queryStr)}&type=${type}`);
+                    const res = await fetch(`${API_BASE_URL}/api/medicines/search?q=${encodeURIComponent(queryStr)}&type=${type}`);
                     if (res.ok) {
                         const saltsData = await res.json();
                         combinedSalts = combinedSalts.concat(saltsData);
@@ -914,20 +914,12 @@ async function sendChatMessage() {
     showTypingIndicator();
 
     try {
-        const chatApiUrl = API_BASE_URL.replace('/search', '/chat').replace('3000', '5000'); // the backend is now at PORT 5000 from the user env
-        // Let's use relative path if we can, or just try the absolute path the API_BASE_URL points to (port 5000 since .env sets 5000)
-        // Wait, the API_BASE_URL is hardcoded to 3000 above.
-        
-        let targetHost = 'http://localhost:5000'; // try 5000 based on .env
-        
-        const res = await fetch(`${targetHost}/api/chat`, {
+        const res = await fetch(`${API_BASE_URL}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: text })
         });
         
-        // If 5000 fails, it might be 3000 if not restarted. Fetch would reject.
-        // I won't over-engineer this since the user asked me to append it.
         const data = await res.json();
         removeTypingIndicator();
         

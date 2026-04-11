@@ -191,123 +191,9 @@ app.get('/api/medicines/salt/:id', (req, res) => {
     res.json(salt);
 });
 
-// ─── BACKWARD COMPATIBILITY: Route Aliases (without /api prefix) ──────────────
-// These allow your old frontend code to work without changes
-app.get('/medicines/search', (req, res) => {
-    // Simply forward to the /api version
-    const query = req.query.q ? req.query.q.toLowerCase().trim() : '';
-    const type = req.query.type || 'brand';
 
-    if (!query || query.length < 3) return res.json([]);
-
-    const results = [];
-    const addedSalts = new Set();
-
-    if (type === 'brand') {
-        for (const [brandName, saltKey] of brand_lookup.entries()) {
-            let isMatch = brandName.includes(query);
-            if (!isMatch && query.length >= 4) {
-                const diff = getEditDistance(query, brandName.substring(0, query.length));
-                if (diff <= 2) isMatch = true;
-            }
-            if (isMatch) {
-                if (!addedSalts.has(saltKey)) {
-                    results.push(master_medicines.get(saltKey));
-                    addedSalts.add(saltKey);
-                }
-            }
-            if (results.length >= 10) break;
-        }
-    } else {
-        for (const master of master_medicines.values()) {
-            const sName = master.salt_name.toLowerCase();
-            let isMatch = sName.includes(query);
-            if (!isMatch && query.length >= 4) {
-                const firstWord = sName.split(' ')[0] || "";
-                if (getEditDistance(query, firstWord) <= 2) isMatch = true;
-            }
-            if (isMatch) {
-                results.push(master);
-            }
-            if (results.length >= 10) break;
-        }
-    }
-
-    res.json(results);
-});
-
-app.get('/medicines/details/:saltKey', async (req, res) => {
-    const saltKey = req.params.saltKey;
-    const master = master_medicines.get(saltKey);
-
-    if (!master) {
-        return res.status(404).json({ error: "Medicine not found" });
-    }
-
-    const saltName = master.salt_name;
-    console.log(`\n🩺 Fetching medical details for: ${saltName}`);
-
-    try {
-        if (!GEMINI_API_KEY) {
-            return res.status(500).json({ error: "Gemini API Key missing on server" });
-        }
-
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({
-            model: "gemini-flash-latest",
-            generationConfig: { responseMimeType: "application/json" }
-        });
-
-        const prompt = `Provide detailed medical information for the medicine salt: "${saltName}".
-        Return ONLY a JSON object with this exact structure:
-        {
-          "used_for": "A clear, 1-2 sentence description of diseases it cures or manages.",
-          "benefits": "Key benefits of this medication.",
-          "side_effects": "Common and serious side effects to watch out for.",
-          "how_to_use": "Standard instructions on how to take it (e.g., with food, time of day).",
-          "dosage": {
-            "kids": "Standard dosage guidance for children.",
-            "adults": "Standard dosage guidance for adults.",
-            "elderly": "Standard dosage guidance for the elderly."
-          },
-          "substitutes": "A comma-separated list of common chemical/salt substitutes."
-        }
-        DO NOT include any Markdown formatting or extra text. ONLY return valid JSON.`;
-
-        const fallbackData = {
-            "used_for": "Information not available due to high server load. Often used to treat specific conditions associated with this salt.",
-            "benefits": "Provides relief from symptoms and aids in recovery. Please consult your doctor for exact medical benefits.",
-            "side_effects": "May cause common side effects such as nausea, dizziness, or allergic reactions. Seek medical advice if severe.",
-            "how_to_use": "Take exactly as directed by your physician. Do not exceed the recommended prescribed dose.",
-            "dosage": {
-                "kids": "Consult a pediatrician for precise dosing.",
-                "adults": "Strictly as prescribed by your doctor.",
-                "elderly": "As prescribed. May require dosage adjustments."
-            },
-            "substitutes": "Alternative generic equivalents may be available at local pharmacies."
-        };
-
-        let responseData;
-        try {
-            const result = await model.generateContent(prompt);
-            let rawText = result.response.text();
-
-            // Strip out markdown code blocks if the AI decided to include them anyway
-            rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-            responseData = JSON.parse(rawText);
-        } catch (apiErr) {
-            console.error("⚠️ Gemini API Rate Limit / Error, using fallback data:", apiErr.message);
-            responseData = fallbackData;
-        }
-
-        res.json(responseData);
-    } catch (err) {
-        console.error("💥 Details Endpoint Error:", err.message);
-        res.status(500).json({ error: "Failed to fetch medical details", description: err.message });
-    }
-});
-
-app.post('/ocr', async (req, res) => {
+// ─── Backend Secure OCR Endpoint ──────────────────────────────────────────────
+app.post('/api/ocr', async (req, res) => {
     console.log(`\n📸 OCR Request received [${new Date().toISOString()}]`);
 
     try {
@@ -411,7 +297,8 @@ Do not return any markdown formatting around the output, only valid JSON.`;
     }
 });
 
-app.get('/ocr/latest', (req, res) => {
+// ─── Backend Endpoint to Fetch Saved OCR JSON via require() ─────────────────
+app.get('/api/ocr/latest', (req, res) => {
     try {
         console.log("Fetching latest OCR JSON via require()...");
         const ocrResultPath = path.join(__dirname, 'data', 'latest_ocr_result.json');
@@ -431,6 +318,78 @@ app.get('/ocr/latest', (req, res) => {
     } catch (err) {
         console.error("Error loading JSON via require():", err.message);
         res.status(500).json({ error: "Failed to load OCR JSON", details: err.message });
+    }
+});
+
+// ─── Backend Medical Details Endpoint (Gemini-Powered Knowledge) ─────────────
+app.get('/api/medicines/details/:saltKey', async (req, res) => {
+    const saltKey = req.params.saltKey;
+    const master = master_medicines.get(saltKey);
+
+    if (!master) {
+        return res.status(404).json({ error: "Medicine not found" });
+    }
+
+    const saltName = master.salt_name;
+    console.log(`\n🩺 Fetching medical details for: ${saltName}`);
+
+    try {
+        if (!GEMINI_API_KEY) {
+            return res.status(500).json({ error: "Gemini API Key missing on server" });
+        }
+
+        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({
+            model: "gemini-flash-latest",
+            generationConfig: { responseMimeType: "application/json" }
+        });
+
+        const prompt = `Provide detailed medical information for the medicine salt: "${saltName}".
+        Return ONLY a JSON object with this exact structure:
+        {
+          "used_for": "A clear, 1-2 sentence description of diseases it cures or manages.",
+          "benefits": "Key benefits of this medication.",
+          "side_effects": "Common and serious side effects to watch out for.",
+          "how_to_use": "Standard instructions on how to take it (e.g., with food, time of day).",
+          "dosage": {
+            "kids": "Standard dosage guidance for children.",
+            "adults": "Standard dosage guidance for adults.",
+            "elderly": "Standard dosage guidance for the elderly."
+          },
+          "substitutes": "A comma-separated list of common chemical/salt substitutes."
+        }
+        DO NOT include any Markdown formatting or extra text. ONLY return valid JSON.`;
+
+        const fallbackData = {
+            "used_for": "Information not available due to high server load. Often used to treat specific conditions associated with this salt.",
+            "benefits": "Provides relief from symptoms and aids in recovery. Please consult your doctor for exact medical benefits.",
+            "side_effects": "May cause common side effects such as nausea, dizziness, or allergic reactions. Seek medical advice if severe.",
+            "how_to_use": "Take exactly as directed by your physician. Do not exceed the recommended prescribed dose.",
+            "dosage": {
+                "kids": "Consult a pediatrician for precise dosing.",
+                "adults": "Strictly as prescribed by your doctor.",
+                "elderly": "As prescribed. May require dosage adjustments."
+            },
+            "substitutes": "Alternative generic equivalents may be available at local pharmacies."
+        };
+
+        let responseData;
+        try {
+            const result = await model.generateContent(prompt);
+            let rawText = result.response.text();
+
+            // Strip out markdown code blocks if the AI decided to include them anyway
+            rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+            responseData = JSON.parse(rawText);
+        } catch (apiErr) {
+            console.error("⚠️ Gemini API Rate Limit / Error, using fallback data:", apiErr.message);
+            responseData = fallbackData;
+        }
+
+        res.json(responseData);
+    } catch (err) {
+        console.error("💥 Details Endpoint Error:", err.message);
+        res.status(500).json({ error: "Failed to fetch medical details", description: err.message });
     }
 });
 
@@ -454,7 +413,7 @@ app.get('/api/pharmacies/nearby', async (req, res) => {
 });
 
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
 
 // ─── Backend Endpoints for Stores ──────────────────────────────────────────────
 app.get('/api/stores/jan-aushadhi', (req, res) => {
@@ -471,17 +430,63 @@ app.get('/api/stores/jan-aushadhi', (req, res) => {
     }
 });
 
-app.get('/stores/jan-aushadhi', (req, res) => {
+
+// ─── Backend AI Doctor Chat Endpoint (Groq-Powered) ──────────────────────────
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+app.post('/api/chat', async (req, res) => {
     try {
-        const storePath = path.join(__dirname, 'data', 'jan_aushadhi_kendras.json');
-        if (!fs.existsSync(storePath)) {
-            return res.status(404).json({ error: "Jan Aushadhi store data not found" });
+        const { message } = req.body;
+        if (!message) {
+            return res.status(400).json({ error: "No message provided" });
         }
-        const storeData = JSON.parse(fs.readFileSync(storePath, 'utf8'));
-        res.json(storeData);
+
+        if (!GROQ_API_KEY) {
+            return res.status(500).json({ error: "GROQ_API_KEY is not configured" });
+        }
+
+        console.log(`\n💬 AI Doctor Chat Request: "${message}"`);
+
+        const promptText = `You are Dr. MedFind, a sympathetic and highly knowledgeable AI Doctor.
+A patient will say: "${message}"
+
+First, determine if the statement is related to a medical problem, health issue, symptom, or general health inquiry.
+If it is NOT related to the medical field, you MUST reply exactly with: "Sorry, I don't have data for your particular problem." and nothing else.
+
+If it IS a medical problem, listen carefully, provide a brief sympathetic response, and then suggest exactly 2 or 3 common generic medicine salts (e.g., Paracetamol, Cetirizine) that treat the problem. Format the response so that the medicine recommendations are clear. Keep your response concise (under 4 sentences).`;
+
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${GROQ_API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                "model": "llama-3.3-70b-versatile",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": promptText
+                    }
+                ],
+                "temperature": 0.3
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Groq API error: ${response.status} ${errorText}`);
+        }
+
+        const data = await response.json();
+        const reply = data.choices[0].message.content.trim();
+        
+        console.log("✅ AI Doctor Reply generated");
+        res.json({ reply });
+
     } catch (err) {
-        console.error("Error loading stores:", err.message);
-        res.status(500).json({ error: "Failed to load stores", details: err.message });
+        console.error("💥 AI Chat Error:", err.message);
+        res.status(500).json({ error: "Failed to generate response", details: err.message });
     }
 });
 

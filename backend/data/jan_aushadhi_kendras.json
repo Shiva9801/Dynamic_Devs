@@ -1,0 +1,78 @@
+{
+  "title": "Pradhan Mantri Bhartiya Janaushadhi Kendras",
+  "subtitle": "Saraikela Kharsawan district, Jharkhand",
+  "kendras": [
+    {
+      "sr_no": 1,
+      "kendra_code": "PMBJK00882",
+      "name": "Ajit Kumar Singh",
+      "state_name": "Jharkhand",
+      "district_name": "Saraikela Kharsawan",
+      "pin_code": "832109",
+      "address": "Plot No N 204 Road No 2 Kalpanapuri"
+    },
+    {
+      "sr_no": 2,
+      "kendra_code": "PMBJK10639",
+      "name": "Sonam Devi",
+      "state_name": "Jharkhand",
+      "district_name": "Saraikela Kharsawan",
+      "pin_code": "832108",
+      "address": "At-Bajrang Tower, Main Road"
+    },
+    {
+      "sr_no": 3,
+      "kendra_code": "PMBJK12154",
+      "name": "Manju Bodra",
+      "state_name": "Jharkhand",
+      "district_name": "Saraikela Kharsawan",
+      "pin_code": "833216",
+      "address": "Kharsawan Lamps Ltd., Chandni Chowk, Kharsawan"
+    },
+    {
+      "sr_no": 4,
+      "kendra_code": "PMBJK12689",
+      "name": "Prameshwar Choudhary (M/S. Aditya Engineering)",
+      "state_name": "Jharkhand",
+      "district_name": "Saraikela Kharsawan",
+      "pin_code": "833220",
+      "address": "Railway Station, Sini, P.O. & P.S.-Sini"
+    },
+    {
+      "sr_no": 5,
+      "kendra_code": "PMBJK14967",
+      "name": "Laxmi Kumari",
+      "state_name": "Jharkhand",
+      "district_name": "Saraikela Kharsawan",
+      "pin_code": "832109",
+      "address": "Plot No-1299/1460, Opp. Sai Mandir, Bhatiya Basti, Adityapur, P.O& P.S-Adityapur, Saraikela Kharsawa"
+    },
+    {
+      "sr_no": 6,
+      "kendra_code": "PMBJK16889",
+      "name": "Jyoti Gupta",
+      "state_name": "Jharkhand",
+      "district_name": "Saraikela Kharsawan",
+      "pin_code": "831013",
+      "address": "Durgawati Singh Shivam Complex, Road Number- 4, NIT Road Adityapur-2, PS- RIT, PO- Adityapur1"
+    },
+    {
+      "sr_no": 7,
+      "kendra_code": "PMBJK17629",
+      "name": "Y Jyoti Laxmi",
+      "state_name": "Jharkhand",
+      "district_name": "Saraikela Kharsawan",
+      "pin_code": "832109",
+      "address": "Ground Floor, Netaji Subhas Medical college & Hospital Campus, P.O+P.S- Adityapur"
+    },
+    {
+      "sr_no": 8,
+      "kendra_code": "PMBJK22170",
+      "name": "Rajni",
+      "state_name": "Jharkhand",
+      "district_name": "Saraikela Kharsawan",
+      "pin_code": "831013",
+      "address": "Shop No.-14&15, MP Nagina complex Main Road, Adityapur, PO+PS- Adityapur"
+    }
+  ]
+}
